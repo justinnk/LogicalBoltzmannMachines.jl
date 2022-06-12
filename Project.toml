@@ -1,0 +1,4 @@
+name = "LogicalBoltzmannMachines"
+uuid = "074bcca7-2d7f-4d14-8051-ee5c04b9b5c7"
+authors = ["justinnk <17525874+justinnk@users.noreply.github.com>"]
+version = "0.1.0"
