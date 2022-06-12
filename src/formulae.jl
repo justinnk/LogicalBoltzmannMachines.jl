@@ -51,14 +51,15 @@ const Valuation = Dict{Char,Bool}
 
 # evaluation
 
-eval(formula::SimpleFormula, v::Valuation) = v[formula.literal] ⊻ formula.neg
-eval(formula::And, v::Valuation) =
-    eval(formula.left, v) && eval(formula.right, v)
-eval(formula::Or, v::Valuation) =
-    eval(formula.left, v) || eval(formula.right, v)
-eval(formula::AbstractFormula, v::Valuation) = eval(formula, v)
+wff_eval(formula::SimpleFormula, v::Valuation) =
+    v[formula.literal] ⊻ formula.neg
+wff_eval(formula::And, v::Valuation) =
+    wff_eval(formula.left, v) && wff_eval(formula.right, v)
+wff_eval(formula::Or, v::Valuation) =
+    wff_eval(formula.left, v) || wff_eval(formula.right, v)
+wff_eval(formula::AbstractFormula, v::Valuation) = wff_eval(formula, v)
 "Evaluate the truth value of the provided formula under the given valuation."
-eval(formula::WFFormula, v::Valuation) = eval(formula.formula, v)
+wff_eval(formula::WFFormula, v::Valuation) = wff_eval(formula.formula, v)
 
 # pretty printing
         
@@ -81,14 +82,7 @@ function Base.show(io::IO, f::SimpleFormula)
     @printf(io, "%s%c", neg, f.literal)
 end
 Base.show(io::IO, f::EmptyFormula) = return
-function Base.show(io::IO, f::WFFormula)
-    @printf(io, "plit: ")
-    show(io, f.pliterals)
-    @printf(io, "\nnlit: ")
-    show(io, f.nliterals)
-    @printf(io, "\n")
-    show(io, f.formula)
-end
+Base.show(io::IO, f::WFFormula) = show(io, f.formula)
 
 ###########################
 # Disjunctive Normal Form #
@@ -122,7 +116,7 @@ function DNFFormula(clauses)
 end
 
 "Returns whether the provided DNF is full (each clause contains all literals)"
-function is_full(f::DNFFormula)
+function isfull(f::DNFFormula)
     for c in f.clauses
         for l in f.literals
             if l ∉ map(x -> x.literal, c.literals)

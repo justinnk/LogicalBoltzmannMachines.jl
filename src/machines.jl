@@ -1,6 +1,6 @@
 
 "A Restricted Boltzmann Machine."
-struct RBM
+mutable struct LBM
     "Values of the input neurons."
     x::Vector{Float64}
     "Bias for each input neuron."
@@ -11,7 +11,7 @@ struct RBM
     b::Vector{Float64}
     "Weights between h (rows) and x (columns)."
     W::Matrix{Float64}
-    RBM(
+    LBM(
         x::Vector{Float64},
         a::Vector{Float64},
         h::Vector{Float64},
@@ -21,42 +21,37 @@ struct RBM
 end
 
 "Creates a Restricted Boltzmann Machine with random visible and hidden values."
-function RBM(a::Vector{Float64}, b::Vector{Float64}, W::Matrix{Float64})
+function LBM(W::Matrix{Float64}, a::Vector{Float64}, b::Vector{Float64})
     size(a, 1) == size(W, 2) || error(
         "Bias vector for the visible layer is incompatible with weight Matrix."
     )
     size(b, 1) == size(W, 1) || error(
         "Bias vector for the hidden layer is incompatible with weight Matrix."
     )
-    RBM(rand([0.0, 1.0], size(a, 1)), a, rand([0.0, 1.0], size(b, 1)), b, W)
+    LBM(rand([0.0, 1.0], size(a, 1)), a, rand([0.0, 1.0], size(b, 1)), b, W)
 end
 
-"Creates a new RBM with the provided visible layer values."
-function update_visible(rbm::RBM, x::Vector{Float64})
-    RBM(x, rbm.a, rbm.h, rbm.b, rbm.W)
-end
-
-"Creates a new RBM with the provided hidden layer values."
-function update_hidden(rbm::RBM, h::Vector{Float64})
-    RBM(rbm.x, rbm.a, h, rbm.b, rbm.W)
-end
+"Initialize the visible layer to a random vector."
+rand_visible!(rbm::LBM) = rbm.x = rand([0.0, 1.0], size(rbm.a, 1))
+"Initialize the visible layer to a random vector."
+rand_hidden!(rbm::LBM) = rbm.h = rand([0.0, 1.0], size(rbm.b, 1))
 
 "Calculate the energy of the provided RBM."
-energy(rbm::RBM) = -(rbm.W * rbm.x)' * rbm.h - rbm.a' * rbm.x - rbm.b' * rbm.h
+energy(rbm::LBM) = -(rbm.W * rbm.x)' * rbm.h - rbm.a' * rbm.x - rbm.b' * rbm.h
 
 "The sigmoid of x."
-sigmoid(x::Float64, τ::Float64) = (1.0 / (1.0 + exp(-(1/τ) * x)))
+sigmoid(x::Float64, T::Float64) = (1.0 / (1.0 + exp(-(1/T) * x)))
 
-"The probability of hidden layer values given visible layer values."
-phx(W::Matrix{Float64}, x::Vector{Float64}, b::Vector{Float64}, τ::Float64) =
-    round.(sigmoid.(W * x + b, τ))
+"The probability of hidden layer values given visible layer values P(h|x)."
+phx(W::Matrix{Float64}, x::Vector{Float64}, b::Vector{Float64}, T::Float64) =
+    round.(sigmoid.(W * x + b, T))
 
-"The probability of visible layer values given hidden layer values."
-pxh(W::Matrix{Float64}, h::Vector{Float64}, a::Vector{Float64}, τ::Float64) =
-    round.(sigmoid.(W' * h + a, τ))
+"The probability of visible layer values given hidden layer values P(x|h)."
+pxh(W::Matrix{Float64}, h::Vector{Float64}, a::Vector{Float64}, T::Float64) =
+    round.(sigmoid.(W' * h + a, T))
 
 "Set visible layer values for the given RBM at certain indices."
-function set_visible_values!(rbm::RBM, values::Dict{Int64, Float64})
+function set_visible_values!(rbm::LBM, values::Dict{Int64, Float64})
     for (idx, f) in values
         rbm.x[idx] = f
     end
@@ -64,36 +59,36 @@ function set_visible_values!(rbm::RBM, values::Dict{Int64, Float64})
 end
 
 "Perform Gibbs sampling on the given RBM, while fixating some visible values."
-function gibbs!(rbm::RBM, fixed::Dict{Int64, Float64}=Dict{Int64, Float64}())
-    rbm = set_visible_values!(rbm, fixed)
+function gibbs!(rbm::LBM, fixed::Dict{Int64, Float64}=Dict{Int64, Float64}())
+    set_visible_values!(rbm, fixed)
     e = energy(rbm)
     old_e = 0.0
-    τ = 1.0
+    T = 1.0
     while (abs(e - old_e) > eps())
-        rbm = update_hidden(rbm, phx(rbm.W, rbm.x, rbm.b, τ))
-        rbm = update_visible(rbm, pxh(rbm.W, rbm.h, rbm.a, τ))
-        rbm = set_visible_values!(rbm, fixed)
+        rbm.h = phx(rbm.W, rbm.x, rbm.b, T)
+        rbm.x = pxh(rbm.W, rbm.h, rbm.a, T)
+        set_visible_values!(rbm, fixed)
         old_e = e
     end
-    return rbm
 end
 
 "Find valuations for the lbm that are consistent with its knowledge."
 function reason(
-    W::Matrix{Float64},
-    a::Vector{Float64},
-    b::Vector{Float64},
+    rbm::LBM
+    ;
+    samples::Int64=100,
     ϵ::Float64=.5,
     query::Dict{Int64, Float64}=Dict{Int64, Float64}(),
-    samples::Int64=100
+    verbose::Bool=false,
 )
     sats = Set{Vector}()
     for iter in range(1, samples)
-        rbm = RBM(a, b, W)
-        if iter % 10 == 0
+        rand_visible!(rbm)
+        rand_hidden!(rbm)
+        if verbose
             println("iteration $iter")
         end
-        rbm = gibbs!(rbm, query)
+        gibbs!(rbm, query)
         # from Proof of Theorem 1
         satisfaction = -(1/ϵ) * energy(rbm)
         if satisfaction == 1.0
@@ -127,5 +122,5 @@ function sdnf2lbm(f::DNFFormula, ϵ::Float64=.5)
         end
         b[j] = STj + ϵ
     end
-    return W, a, b
+    return LBM(W, a, b)
 end

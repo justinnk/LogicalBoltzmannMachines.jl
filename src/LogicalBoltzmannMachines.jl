@@ -23,8 +23,9 @@ export
 # functions
 
 export 
-    eval,
-    is_full,
+    Lit, nLit,
+    wff_eval,
+    isfull,
     dnf2wff,
     wff2dnf
 
@@ -37,7 +38,7 @@ include("machines.jl")
 # data structures
 
 export
-    RBM
+    LBM
 
 # functions
 

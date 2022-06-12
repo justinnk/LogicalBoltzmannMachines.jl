@@ -1,17 +1,19 @@
 
 using LogicalBoltzmannMachines
 
-function main()
+"Reproduces the xor example from the paper."
+function xor_example()
     f = DNFFormula([
         ConjunctiveClause([nLit('x'), nLit('y'), nLit('z')]),
         ConjunctiveClause([nLit('x'),  Lit('y'),  Lit('z')]),
         ConjunctiveClause([ Lit('x'), nLit('y'),  Lit('z')]),
         ConjunctiveClause([ Lit('x'),  Lit('y'), nLit('z')]),
     ])
-    @show is_full(f)
+    @show isfull(f)
     @show dnf2wff(f)
-    @show lbm_vals = sdnf2lbm(f)
-    @show find_sat(lbm_vals...)
+    @show lbm = sdnf2lbm(f)
+    res = reason(lbm; samples=Int(1e6))
+    @show res
 end
 
-main()
+@time xor_example()
