@@ -69,6 +69,7 @@ function gibbs!(rbm::LBM, fixed::Dict{Int64, Float64}=Dict{Int64, Float64}())
         rbm.x = pxh(rbm.W, rbm.h, rbm.a, T)
         set_visible_values!(rbm, fixed)
         old_e = e
+        e = energy(rbm)
     end
 end
 
@@ -112,15 +113,16 @@ function sdnf2lbm(f::DNFFormula, ϵ::Float64=.5)
     W::Matrix{Float64} = zeros(nclauses, nliterals)
     b::Vector{Float64} = zeros(nclauses)
     a::Vector{Float64} = zeros(nliterals)
+    lit2idx = Dict(lit => idx for (idx, lit) in enumerate(f.literals))
     for (j, clause) in enumerate(f.clauses)
         STj = 0.0
-        for (i, literal) in enumerate(clause.literals)
-            W[j,i] = b2d(!literal.neg)
+        for literal in clause.literals
+            W[j, lit2idx[literal.literal]] = b2d(!literal.neg)
             if !literal.neg
                 STj -= 1.0
             end
         end
         b[j] = STj + ϵ
     end
-    return LBM(W, a, b)
+    return LBM(W, a, b), lit2idx, Dict(idx => lit for (lit, idx) in lit2idx)
 end

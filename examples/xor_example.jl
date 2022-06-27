@@ -11,8 +11,8 @@ function xor_example()
     ])
     @show isfull(f)
     @show dnf2wff(f)
-    @show lbm = sdnf2lbm(f)
-    res = reason(lbm; samples=Int(1e6))
+    @show lbm, _, _ = sdnf2lbm(f)
+    res = reason(lbm; samples=Int(1e2))
     @show res
 end
 
