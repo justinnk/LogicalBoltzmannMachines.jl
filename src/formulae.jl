@@ -14,7 +14,7 @@ end
 "An atomic proposition."
 struct SimpleFormula <: AbstractFormula
     "The one-letter name of the literal"
-    literal::Char
+    literal::String
     "Whether the literal is in negated form"
     neg::Bool
     SimpleFormula(literal, neg) = new(literal, neg)
@@ -47,7 +47,7 @@ struct WFFormula
 end
 
 "An assignment of truth values for each name in a well-formed formula."
-const Valuation = Dict{Char,Bool}
+const Valuation = Dict{String,Bool}
 
 # evaluation
 
@@ -79,7 +79,7 @@ function Base.show(io::IO, f::Or)
 end
 function Base.show(io::IO, f::SimpleFormula)
     neg = if f.neg "¬" else "" end 
-    @printf(io, "%s%c", neg, f.literal)
+    @printf(io, "%s%s", neg, f.literal)
 end
 Base.show(io::IO, f::EmptyFormula) = return
 Base.show(io::IO, f::WFFormula) = show(io, f.formula)
@@ -103,12 +103,12 @@ struct DNFFormula <: AbstractFormula
     "The clauses disjoined in this dnf"
     clauses::Array{ConjunctiveClause}
     "The set of literals in this formula"
-    literals::Set{Char}
+    literals::Set{String}
     DNFFormula(clauses, literals) = new(clauses, literals)
 end
 
 function DNFFormula(clauses)
-    literals::Set{Char} = Set{Char}()
+    literals::Set{String} = Set{String}()
     for c in clauses
         push!(literals, [l.literal for l in c.literals]...)
     end

@@ -1,5 +1,7 @@
 
-"A Restricted Boltzmann Machine."
+using Plots
+
+"A Logical Boltzmann Machine."
 mutable struct LBM
     "Values of the input neurons."
     x::Vector{Float64}
@@ -31,25 +33,25 @@ function LBM(W::Matrix{Float64}, a::Vector{Float64}, b::Vector{Float64})
     LBM(rand([0.0, 1.0], size(a, 1)), a, rand([0.0, 1.0], size(b, 1)), b, W)
 end
 
-"Initialize the visible layer to a random vector."
+"Initialize the visible layer of rbm to a random vector."
 rand_visible!(rbm::LBM) = rbm.x = rand([0.0, 1.0], size(rbm.a, 1))
 "Initialize the visible layer to a random vector."
 rand_hidden!(rbm::LBM) = rbm.h = rand([0.0, 1.0], size(rbm.b, 1))
 
-"Calculate the energy of the provided RBM."
+"Calculate the energy of rbm the provided LBM."
 energy(rbm::LBM) = -(rbm.W * rbm.x)' * rbm.h - rbm.a' * rbm.x - rbm.b' * rbm.h
+"Calculate the free energy of the provided LBM."
+fenergy(rbm::LBM, c::Float64) = 
+    -sum(log.(1 .+ exp.(c *(rbm.W * rbm.x + rbm.b)))) - rbm.a' * rbm.x
 
-"The sigmoid of x."
+"The sigmoid of x, scaled by T^-1."
 sigmoid(x::Float64, T::Float64) = (1.0 / (1.0 + exp(-(1/T) * x)))
-
-"The probability of hidden layer values given visible layer values P(h|x)."
+"The probability of hidden layer values given visible layer values, P(h|x)."
 phx(W::Matrix{Float64}, x::Vector{Float64}, b::Vector{Float64}, T::Float64) =
     round.(sigmoid.(W * x + b, T))
-
-"The probability of visible layer values given hidden layer values P(x|h)."
+"The probability of visible layer values given hidden layer values, P(x|h)."
 pxh(W::Matrix{Float64}, h::Vector{Float64}, a::Vector{Float64}, T::Float64) =
     round.(sigmoid.(W' * h + a, T))
-
 "Set visible layer values for the given RBM at certain indices."
 function set_visible_values!(rbm::LBM, values::Dict{Int64, Float64})
     for (idx, f) in values
@@ -57,12 +59,12 @@ function set_visible_values!(rbm::LBM, values::Dict{Int64, Float64})
     end
     rbm
 end
-
 "Perform Gibbs sampling on the given RBM, while fixating some visible values."
 function gibbs!(rbm::LBM, fixed::Dict{Int64, Float64}=Dict{Int64, Float64}())
+    # TODO: Implement parallel tempering, see https://christian-igel.github.io/paper/TRBMAI.pdf
     set_visible_values!(rbm, fixed)
     e = energy(rbm)
-    old_e = 0.0
+    old_e = e + 1.0
     T = 1.0
     while (abs(e - old_e) > eps())
         rbm.h = phx(rbm.W, rbm.x, rbm.b, T)
@@ -70,14 +72,15 @@ function gibbs!(rbm::LBM, fixed::Dict{Int64, Float64}=Dict{Int64, Float64}())
         set_visible_values!(rbm, fixed)
         old_e = e
         e = energy(rbm)
-    end
+    end 
 end
 
 "Find valuations for the lbm that are consistent with its knowledge."
-function reason(
+function reason!(
     rbm::LBM
     ;
     samples::Int64=100,
+    factor::Int64=1,
     ϵ::Float64=.5,
     query::Dict{Int64, Float64}=Dict{Int64, Float64}(),
     verbose::Bool=false,
@@ -91,12 +94,13 @@ function reason(
         end
         gibbs!(rbm, query)
         # from Proof of Theorem 1
-        satisfaction = -(1/ϵ) * energy(rbm)
-        if satisfaction == 1.0
+        # s(x) = nergy(rbm) <= -f * ϵ, where f is the number of "rules"
+        satisfaction = -(1/(factor * ϵ)) * energy(rbm)
+        if satisfaction >= 1 
             push!(sats, rbm.x)
         end
     end
-    return sats
+    return collect(sats)
 end
 
 "Convert a boolean to a float value in {-1.0, 1.0}."
@@ -106,8 +110,7 @@ b2d(b::Bool) = if b 1.0 else -1.0 end
 Construct weights and biases of a Restricted Boltzmann Machine from the
 provided DNF formula, which has to be a full DNF.
 """
-function sdnf2lbm(f::DNFFormula, ϵ::Float64=.5)
-    isfull(f) || error("The provided formula has to be full.")
+function sdnf2lbm(f::DNFFormula; ϵ::Float64=.5)
     nliterals = length(f.literals)
     nclauses = length(f.clauses)
     W::Matrix{Float64} = zeros(nclauses, nliterals)
@@ -125,4 +128,75 @@ function sdnf2lbm(f::DNFFormula, ϵ::Float64=.5)
         b[j] = STj + ϵ
     end
     return LBM(W, a, b), lit2idx, Dict(idx => lit for (lit, idx) in lit2idx)
+end
+
+"""
+Turns an LBM into a dot language graph.
+"""
+function lbm2dot(lbm::LBM, idx2lit::Dict{Int64, String})
+    dot = "graph LBM {\n"
+    dot *= "splines=false\n"
+    dot *= "node [shape=rect]\n"
+    dot *= "{\nrank=source\n"
+    dot *= "node [shape=oval]\n"
+    for (idx, b) in enumerate(lbm.b)
+        dot *= "b$idx [label=\"$b\"]\n"
+    end
+    dot *= "}\n"
+    dot *= "{\nrank=2\n"
+    for (idx, h) in enumerate(lbm.h)
+        dot *= "h$idx [label=\"h$idx\"]\n"
+    end
+    dot *= "}\n"
+    dot *= "{\nrank=sink\n"
+    for (idx, x) in enumerate(lbm.x)
+        dot *= "x$idx [label=\"$(idx2lit[idx])\"]\n"
+    end
+    dot *= "}\n"
+    for (j, h) in enumerate(lbm.h)
+        dot *= "b$j -- h$j\n"
+        for (i, x) in enumerate(lbm.x)
+            dot *= "x$i -- h$j [label=\"$(lbm.W[j,i])\"]\n"
+        end
+    end
+    dot *= "\n}"
+end
+
+"""
+Plots the energy function. Should only be used with small RBM.
+"""
+function plot_energy_space!(lbm::LBM)
+    energies = []
+    confs = []
+    hconfs = collect(Iterators.product([0.0:1.0 for _ in lbm.h]...))
+    xconfs = collect(Iterators.product([0.0:1.0 for _ in lbm.x]...))
+    for (idx, hconf) in enumerate(hconfs)
+        for xconf in xconfs
+            lbm.x = collect(xconf)
+            lbm.h = collect(hconf)
+            push!(energies, energy(lbm))
+            push!(confs, "h $hconf x $xconf")
+        end
+    end
+    plotly()
+    p = plot(confs, energies; minorticks=true, xrotation=60, xticks=:all, size=(800, 600))
+    display(p)
+end
+
+"""
+Plots the free energy function. Should only be used with small RBM.
+"""
+function plot_fenergy_space!(lbm::LBM, c::Float64, ϵ::Float64)
+    energies = Vector{Float64}([])
+    confs = Vector([])
+    xconfs = collect(Iterators.product([0.0:1.0 for _ in lbm.x]...))
+    for xconf in xconfs
+        lbm.x = collect(xconf)
+        push!(energies, fenergy(lbm, c))
+        push!(confs, "$xconf")
+        end
+    plotly()
+    p = plot(confs, energies; minorticks=true, xrotation=60, xticks=:all, size=(800, 600))
+    plot!(p, confs, fill(-log(1 + exp(c * ϵ)), size(confs, 1)))
+    display(p)
 end

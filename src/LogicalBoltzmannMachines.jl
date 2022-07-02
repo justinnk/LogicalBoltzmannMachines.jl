@@ -44,8 +44,12 @@ export
 
 export
     energy,
+    fenergy,
     gibbs!,
-    reason,
-    sdnf2lbm
+    reason!,
+    sdnf2lbm,
+    lbm2dot,
+    plot_energy_space!,
+    plot_fenergy_space!
 
 end
