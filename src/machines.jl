@@ -67,8 +67,11 @@ function gibbs!(rbm::LBM, fixed::Dict{Int64, Float64}=Dict{Int64, Float64}())
     old_e = e + 1.0
     T = 1.0
     while (abs(e - old_e) > eps())
-        rbm.h = phx(rbm.W, rbm.x, rbm.b, T)
-        rbm.x = pxh(rbm.W, rbm.h, rbm.a, T)
+        # TODO: make this prettier...
+        idx = rand(1:length(rbm.h))
+        rbm.h[idx] = phx(rbm.W, rbm.x, rbm.b, T)[idx]
+        idx = rand(1:length(rbm.x))
+        rbm.x[idx] = pxh(rbm.W, rbm.h, rbm.a, T)[idx]
         set_visible_values!(rbm, fixed)
         old_e = e
         e = energy(rbm)
@@ -168,14 +171,29 @@ Plots the energy function. Should only be used with small RBM.
 function plot_energy_space!(lbm::LBM)
     energies = []
     confs = []
+    csv_confs = []
     hconfs = collect(Iterators.product([0.0:1.0 for _ in lbm.h]...))
     xconfs = collect(Iterators.product([0.0:1.0 for _ in lbm.x]...))
+    tpl_to_str(tpl) = begin
+        str = ""
+        for e in tpl
+            str *= "$(Int(e))"
+        end
+        return str
+    end
     for (idx, hconf) in enumerate(hconfs)
         for xconf in xconfs
             lbm.x = collect(xconf)
             lbm.h = collect(hconf)
             push!(energies, energy(lbm))
             push!(confs, "h $hconf x $xconf")
+            push!(csv_confs, "\"$(tpl_to_str((hconf...,xconf...)))\"")
+        end
+    end
+    open("plot_data.csv", "w+") do io
+        write(io, "x,y\n")
+        for row in zip(csv_confs, energies)
+            write(io, "$(row[1]), $(row[2])\n")
         end
     end
     plotly()
